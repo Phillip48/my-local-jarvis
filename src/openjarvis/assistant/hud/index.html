@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>J.A.R.V.I.S.</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #03070c;
+    --accent: #4fd8ff;
+    --accent-dim: rgba(79, 216, 255, 0.35);
+    --amber: #ffb547;
+    --red: #ff5a5a;
+    --text: #cfeefc;
+    --muted: #5e8396;
+    --panel: rgba(8, 22, 32, 0.72);
+    --line: rgba(79, 216, 255, 0.18);
+    --mono: "SF Mono", ui-monospace, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 14px/1.5 var(--mono); overflow: hidden; }
+  body::before { /* faint HUD grid */
+    content: ""; position: fixed; inset: 0; pointer-events: none;
+    background:
+      radial-gradient(ellipse at 38% 50%, rgba(79,216,255,0.07), transparent 60%),
+      linear-gradient(var(--line) 1px, transparent 1px) 0 0 / 48px 48px,
+      linear-gradient(90deg, var(--line) 1px, transparent 1px) 0 0 / 48px 48px;
+    opacity: 0.35;
+    mask-image: radial-gradient(ellipse at 38% 50%, #000 20%, transparent 75%);
+  }
+  .app { position: relative; display: grid; grid-template-columns: 1fr 420px; height: 100%; }
+
+  /* Left: reactor */
+  .stage { position: relative; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; }
+  header { position: absolute; top: 28px; left: 36px; right: 36px; display: flex;
+    justify-content: space-between; align-items: flex-start; }
+  .brand { letter-spacing: 0.5em; font-size: 18px; color: var(--accent);
+    text-shadow: 0 0 12px var(--accent-dim); }
+  .brand small { display: block; letter-spacing: 0.25em; font-size: 10px; color: var(--muted);
+    margin-top: 6px; }
+  .controls { display: flex; gap: 8px; }
+  .chip { background: transparent; border: 1px solid var(--line); color: var(--muted);
+    font: 11px var(--mono); letter-spacing: 0.15em; text-transform: uppercase;
+    padding: 6px 10px; cursor: pointer; transition: all .15s; }
+  .chip:hover { color: var(--text); border-color: var(--accent-dim); }
+  .chip.on { color: var(--accent); border-color: var(--accent); box-shadow: 0 0 10px var(--accent-dim) inset; }
+  .seg { display: flex; }
+  .seg .chip + .chip { border-left: none; }
+
+  canvas { width: min(62vh, 52vw); height: min(62vh, 52vw);
+    /* glow drawn by the GPU, far cheaper than canvas shadowBlur */
+    filter: drop-shadow(0 0 6px var(--glow, rgba(79,216,255,0.9))); }
+  .state { margin-top: 18px; letter-spacing: 0.6em; font-size: 12px; color: var(--accent);
+    text-transform: uppercase; min-height: 18px; transition: color .3s; }
+  .hint { margin-top: 8px; color: var(--muted); font-size: 11px; letter-spacing: 0.1em; }
+  kbd { border: 1px solid var(--line); padding: 1px 6px; font: inherit; color: var(--text); }
+  .readout { position: absolute; bottom: 28px; left: 36px; color: var(--muted); font-size: 10px;
+    letter-spacing: 0.2em; line-height: 1.9; text-transform: uppercase; }
+  .readout b { color: var(--text); font-weight: normal; }
+
+  /* Right: transcript */
+  aside { display: flex; flex-direction: column; border-left: 1px solid var(--line);
+    background: var(--panel); backdrop-filter: blur(6px); min-height: 0; }
+  aside h2 { margin: 0; padding: 22px 22px 14px; font-size: 10px; font-weight: normal;
+    letter-spacing: 0.35em; color: var(--muted); border-bottom: 1px solid var(--line); }
+  #log { flex: 1; overflow-y: auto; padding: 18px 22px; display: flex; flex-direction: column; gap: 14px; }
+  .msg { max-width: 100%; white-space: pre-wrap; word-wrap: break-word; }
+  .msg .who { display: block; font-size: 9px; letter-spacing: 0.3em; color: var(--muted); margin-bottom: 2px; }
+  .msg.user { color: #fff; }
+  .msg.assistant { color: var(--text); padding-left: 10px; border-left: 2px solid var(--accent-dim); }
+  .msg.tool { color: var(--amber); font-size: 11px; opacity: 0.85; }
+  .msg.error { color: var(--red); font-size: 12px; }
+  form { display: flex; border-top: 1px solid var(--line); }
+  form input { flex: 1; background: transparent; border: none; outline: none; color: var(--text);
+    font: 13px var(--mono); padding: 18px 22px; }
+  form input::placeholder { color: var(--muted); }
+
+  /* Approval dialog */
+  .modal { position: fixed; inset: 0; display: none; place-items: center;
+    background: rgba(0,0,0,0.6); z-index: 10; }
+  .modal.open { display: grid; }
+  .card { width: min(560px, 90vw); border: 1px solid var(--amber); background: #0b1015;
+    padding: 24px; box-shadow: 0 0 40px rgba(255,181,71,0.15); }
+  .card h3 { margin: 0 0 4px; font-size: 11px; letter-spacing: 0.35em; color: var(--amber); font-weight: normal; }
+  .card pre { background: #000; padding: 14px; color: #fff; white-space: pre-wrap;
+    word-break: break-all; max-height: 40vh; overflow: auto; border: 1px solid #222; }
+  .card .row { display: flex; gap: 10px; justify-content: flex-end; }
+  .card button { font: 12px var(--mono); letter-spacing: 0.2em; padding: 10px 18px; cursor: pointer;
+    background: transparent; border: 1px solid var(--muted); color: var(--text); }
+  .card button.allow { border-color: var(--amber); color: var(--amber); }
+  .offline { position: fixed; top: 0; left: 0; right: 0; text-align: center; padding: 6px;
+    background: var(--red); color: #000; font-size: 11px; letter-spacing: 0.2em; display: none; }
+</style>
+</head>
+<body>
+<div class="offline" id="offline">CONNECTION LOST — RECONNECTING</div>
+<div class="app">
+  <section class="stage">
+    <header>
+      <div class="brand">J.A.R.V.I.S.<small>Just A Rather Very Intelligent System</small></div>
+      <div class="controls">
+        <div class="seg">
+          <button class="chip" data-brain="claude">Claude</button>
+          <button class="chip" data-brain="ollama">Local</button>
+        </div>
+        <button class="chip" id="wake">Wake word</button>
+        <button class="chip" id="reset" title="Start a new conversation">Reset</button>
+      </div>
+    </header>
+
+    <canvas id="reactor" width="900" height="900"></canvas>
+    <div class="state" id="state">booting</div>
+    <div class="hint" id="voice-hint">Hold <kbd>Space</kbd> to talk<span id="wake-hint"> · or say “Hey Jarvis”</span></div>
+    <div class="hint" id="nomic-hint" style="display:none;color:var(--amber)">No microphone detected · type below, or plug one in</div>
+
+    <div class="readout">
+      Core <b id="r-model">—</b><br>
+      Memory <b id="r-mem">0</b> entries<br>
+      Local time <b id="r-time">—</b>
+    </div>
+  </section>
+
+  <aside>
+    <h2>COMMS LOG</h2>
+    <div id="log"></div>
+    <form id="form"><input id="input" placeholder="Type a command…" autocomplete="off"></form>
+  </aside>
+</div>
+
+<div class="modal" id="modal">
+  <div class="card">
+    <h3>AUTHORISATION REQUIRED</h3>
+    <p id="m-tool"></p>
+    <pre id="m-args"></pre>
+    <div class="row">
+      <button id="deny">Deny <small>(Esc)</small></button>
+      <button class="allow" id="allow">Allow <small>(Enter)</small></button>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let ws, state = "booting", level = 0, targetLevel = 0, pendingConfirm = null, currentReply = null;
+
+// ---------- WebSocket ----------
+function connect() {
+  ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onopen = () => $("offline").style.display = "none";
+  ws.onclose = () => { $("offline").style.display = "block"; setState("offline"); setTimeout(connect, 1500); };
+  ws.onmessage = (e) => handle(JSON.parse(e.data));
+}
+const send = (msg) => ws && ws.readyState === 1 && ws.send(JSON.stringify(msg));
+
+function handle(m) {
+  switch (m.type) {
+    case "status":
+      setState(m.state);
+      document.querySelectorAll("[data-brain]").forEach(b => b.classList.toggle("on", b.dataset.brain === m.brain));
+      $("wake").classList.toggle("on", m.wake);
+      $("wake-hint").style.display = m.wake ? "" : "none";
+      $("voice-hint").style.display = m.mic ? "" : "none";
+      $("nomic-hint").style.display = m.mic ? "none" : "";
+      $("r-model").textContent = m.model;
+      $("r-mem").textContent = m.memories;
+      break;
+    case "state": setState(m.state); break;
+    case "level": targetLevel = m.level; break;
+    case "message": currentReply = null; addMsg(m.role, m.text); break;
+    case "delta":
+      if (!currentReply) currentReply = addMsg("assistant", "");
+      currentReply.body.textContent += m.text;
+      scroll();
+      break;
+    case "done": currentReply = null; break;
+    case "tool":
+      currentReply = null;
+      addMsg("tool", `▸ ${m.name}(${Object.entries(m.args || {}).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join(", ")})`);
+      break;
+    case "error": addMsg("error", m.text); break;
+    case "memories": $("r-mem").textContent = m.count; break;
+    case "confirm": openConfirm(m); break;
+    case "confirm_closed": if (pendingConfirm === m.id) closeConfirm(); break;
+    case "reset": $("log").innerHTML = ""; addMsg("tool", "— new conversation —"); break;
+  }
+}
+
+function addMsg(role, text) {
+  const el = document.createElement("div");
+  el.className = `msg ${role}`;
+  if (role === "user" || role === "assistant") {
+    const who = document.createElement("span");
+    who.className = "who";
+    who.textContent = role === "user" ? "YOU" : "JARVIS";
+    el.appendChild(who);
+  }
+  const body = document.createElement("span");
+  body.textContent = text;
+  el.appendChild(body);
+  $("log").appendChild(el);
+  scroll();
+  return { el, body };
+}
+const scroll = () => { const l = $("log"); l.scrollTop = l.scrollHeight; };
+
+function setState(s) {
+  state = s;
+  $("state").textContent = s;
+  $("state").style.color = s === "thinking" ? "var(--amber)" : s === "offline" ? "var(--red)" : "var(--accent)";
+}
+
+// ---------- Controls ----------
+document.querySelectorAll("[data-brain]").forEach(b => b.onclick = () => send({ type: "brain", name: b.dataset.brain }));
+$("wake").onclick = () => send({ type: "wake", enabled: !$("wake").classList.contains("on") });
+$("reset").onclick = () => send({ type: "reset" });
+$("form").onsubmit = (e) => {
+  e.preventDefault();
+  const text = $("input").value.trim();
+  if (text) send({ type: "text", text });
+  $("input").value = "";
+};
+
+// Push-to-talk: hold Space (when not typing)
+let talking = false;
+addEventListener("keydown", (e) => {
+  if (pendingConfirm !== null) {
+    if (e.key === "Enter") { e.preventDefault(); answer(true); }
+    if (e.key === "Escape") answer(false);
+    return;
+  }
+  if (e.code === "Space" && !e.repeat && document.activeElement !== $("input")) {
+    e.preventDefault(); talking = true; send({ type: "ptt_start" });
+  }
+});
+addEventListener("keyup", (e) => {
+  if (e.code === "Space" && talking) { talking = false; send({ type: "ptt_stop" }); }
+});
+addEventListener("blur", () => { if (talking) { talking = false; send({ type: "ptt_stop" }); } });
+
+function openConfirm(m) {
+  pendingConfirm = m.id;
+  $("m-tool").textContent = `Jarvis wants to use ${m.tool}:`;
+  $("m-args").textContent = m.args.command ?? JSON.stringify(m.args, null, 2);
+  $("modal").classList.add("open");
+}
+function closeConfirm() { pendingConfirm = null; $("modal").classList.remove("open"); }
+function answer(approved) { send({ type: "confirm", id: pendingConfirm, approved }); closeConfirm(); }
+$("allow").onclick = () => answer(true);
+$("deny").onclick = () => answer(false);
+
+setInterval(() => { $("r-time").textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }); }, 1000);
+
+// ---------- Arc reactor ----------
+const cv = $("reactor"), ctx = cv.getContext("2d");
+const W = cv.width, C = W / 2;
+const COLORS = { thinking: [255, 181, 71], offline: [255, 90, 90], booting: [94, 131, 150] };
+let col = [79, 216, 255], t0 = performance.now();
+
+function rgba(c, a) { return `rgba(${c[0]},${c[1]},${c[2]},${a})`; }
+
+function ring(r, width, alpha, start = 0, end = Math.PI * 2) {
+  ctx.beginPath(); ctx.arc(C, C, r, start, end);
+  ctx.lineWidth = width; ctx.strokeStyle = rgba(col, alpha); ctx.stroke();
+}
+function ticks(r, n, len, alpha, rot, every = 1) {
+  ctx.save(); ctx.translate(C, C); ctx.rotate(rot);
+  ctx.strokeStyle = rgba(col, alpha); ctx.lineWidth = 2;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2, l = i % every === 0 ? len * 1.8 : len;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+    ctx.lineTo(Math.cos(a) * (r - l), Math.sin(a) * (r - l));
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+function arcs(r, width, count, gap, rot, alpha) {
+  const seg = (Math.PI * 2) / count;
+  for (let i = 0; i < count; i++) ring(r, width, alpha, rot + i * seg, rot + (i + 1) * seg - gap);
+}
+
+// Frame rate: smooth while active, and a gentle 15 fps while idle to save CPU.
+const ACTIVE_STATES = new Set(["listening", "thinking", "speaking"]);
+let lastFrame = 0;
+
+function frame(now) {
+  requestAnimationFrame(frame);
+  if (now - lastFrame < 1000 / (ACTIVE_STATES.has(state) ? 30 : 15)) return;
+  lastFrame = now;
+  const t = (now - t0) / 1000;
+  const target = COLORS[state] || [79, 216, 255];
+  col = col.map((v, i) => v + (target[i] - v) * 0.08);
+
+  // energy: how "alive" the reactor looks in each state
+  if (state !== "listening") targetLevel = 0;
+  level += (targetLevel - level) * 0.25;
+  let energy = 0.25 + 0.05 * Math.sin(t * 1.5);               // idle breathing
+  if (state === "listening") energy = 0.45 + level * 1.4;
+  if (state === "thinking") energy = 0.55 + 0.1 * Math.sin(t * 6);
+  if (state === "speaking") energy = 0.5 + 0.25 * Math.abs(Math.sin(t * 7.3) * Math.sin(t * 3.1));
+  const speed = state === "thinking" ? 3 : state === "speaking" ? 1.4 : 1;
+
+  ctx.clearRect(0, 0, W, W);
+  cv.style.setProperty("--glow", rgba(col.map(Math.round), 0.9));
+
+  // outer frame
+  ring(420, 1, 0.25);
+  ticks(410, 120, 8, 0.35, t * 0.05 * speed, 10);
+  arcs(375, 3, 3, 0.5, -t * 0.25 * speed, 0.55);
+  ring(352, 1, 0.2);
+  arcs(330, 14, 24, 0.06, t * 0.4 * speed, 0.12 + energy * 0.25);
+  ticks(300, 60, 10, 0.5, -t * 0.15 * speed, 5);
+  arcs(270, 2, 6, 0.35, t * 0.7 * speed, 0.7);
+  ring(245 + energy * 10, 1.5, 0.35);
+
+  // core: triangular "palladium" ring and glowing heart
+  ctx.save(); ctx.translate(C, C); ctx.rotate(-t * 0.2 * speed);
+  ctx.strokeStyle = rgba(col, 0.8); ctx.lineWidth = 3;
+  ctx.beginPath();
+  for (let i = 0; i <= 3; i++) {
+    const a = (i / 3) * Math.PI * 2 - Math.PI / 2;
+    const r = 175 + energy * 12;
+    i ? ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r) : ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+  }
+  ctx.stroke();
+  ctx.restore();
+
+  arcs(140, 10, 10, 0.12, -t * 0.5 * speed, 0.45 + energy * 0.3);
+
+  const glowR = 70 + energy * 55;
+  const g = ctx.createRadialGradient(C, C, 0, C, C, glowR * 1.8);
+  g.addColorStop(0, `rgba(255,255,255,${0.75 + energy * 0.25})`);
+  g.addColorStop(0.25, rgba(col, 0.85));
+  g.addColorStop(0.6, rgba(col, 0.18));
+  g.addColorStop(1, rgba(col, 0));
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(C, C, glowR * 1.8, 0, Math.PI * 2); ctx.fill();
+  ring(glowR * 0.7, 2, 0.9);
+}
+requestAnimationFrame(frame);
+connect();
+</script>
+</body>
+</html>

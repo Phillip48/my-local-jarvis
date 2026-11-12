@@ -48,6 +48,10 @@ OLLAMA_CONTEXT = int(os.getenv("JARVIS_OLLAMA_CONTEXT", "8192"))
 # Let the local model reason before answering from tool results (e.g. web searches). Much
 # less likely to make things up, but those answers take 15-45 s instead of about 8.
 OLLAMA_THINK = _flag("JARVIS_OLLAMA_THINK", False)
+# How long the local model stays in memory after you last spoke to Jarvis (Ollama
+# duration, e.g. "30m", "2h", or "-1" for always). Loading it takes about 20 s, but it
+# holds about 10 GB of memory while loaded.
+OLLAMA_KEEP_ALIVE = os.getenv("JARVIS_OLLAMA_KEEP_ALIVE", "30m")
 
 # Speech
 WHISPER_MODEL = os.getenv("JARVIS_WHISPER_MODEL", "small.en")

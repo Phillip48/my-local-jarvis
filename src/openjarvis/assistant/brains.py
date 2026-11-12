@@ -4,6 +4,7 @@ Both run the same loop: stream text back as it's generated, run any tools the mo
 for, feed the results back, and repeat until the model gives a final answer.
 """
 
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
@@ -82,6 +83,9 @@ class ClaudeBrain:
     @property
     def label(self) -> str:
         return config.CLAUDE_MODEL
+
+    def warm(self) -> None:
+        pass  # nothing to load
 
     def reset(self) -> None:
         self.system = system_prompt()
@@ -177,6 +181,27 @@ class OllamaBrain:
     def reset(self) -> None:
         self.messages: list = [{"role": "system", "content": system_prompt()}]
 
+    def warm(self) -> None:
+        """Load the model and have it read the instructions, tools and conversation so far,
+        in the background, while the user is still talking. The reply then only has to
+        read the new question: about 1 s instead of 7 (or 20 when the model wasn't loaded)."""
+        messages = list(self.messages)
+
+        def run() -> None:
+            try:
+                self.client.chat(
+                    model=config.OLLAMA_MODEL,
+                    messages=messages,
+                    tools=self.tools,
+                    think=False,
+                    options={"num_ctx": config.OLLAMA_CONTEXT, "num_predict": 1},
+                    keep_alive=config.OLLAMA_KEEP_ALIVE,
+                )
+            except Exception:  # noqa: BLE001 - only a head start; the real request reports errors
+                pass
+
+        threading.Thread(target=run, daemon=True).start()
+
     def respond(self, text: str, ev: Events) -> None:
         start = len(self.messages)
         self.messages.append({"role": "user", "content": text})
@@ -198,6 +223,7 @@ class OllamaBrain:
                 # Reasoning is slow, so it is off for plain chat and optional after tools.
                 think=config.OLLAMA_THINK and step > 0,
                 options={"num_ctx": config.OLLAMA_CONTEXT},  # room for web results
+                keep_alive=config.OLLAMA_KEEP_ALIVE,
             ):
                 if chunk.message.content:
                     content.append(chunk.message.content)

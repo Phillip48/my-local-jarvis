@@ -107,6 +107,7 @@ class Jarvis:
         subprocess.Popen(["afplay", "/System/Library/Sounds/Tink.aiff"])
         self.set_state("listening")
         self.stt.warm()
+        self.brain.warm()
         self.mic.start_recording(auto_stop=True)
 
     def _on_utterance(self, audio: np.ndarray) -> None:
@@ -222,6 +223,7 @@ class Jarvis:
             self.interrupt()
             self.set_state("listening")
             self.stt.warm()
+            self.brain.warm()
             self.mic.start_recording(auto_stop=False)
         elif kind == "ptt_stop":
             self.mic.stop_recording()

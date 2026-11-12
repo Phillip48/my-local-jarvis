@@ -97,6 +97,10 @@ All settings are in `.env` (see `.env.example`). Common tweaks:
 - **Jarvis cuts you off / waits too long after you finish:** `JARVIS_END_SILENCE`
   (seconds of pause, default 1.5). Speech is detected with Silero VAD, so background
   noise and quiet words don't confuse it.
+- **Speed vs. memory:** Jarvis starts loading the local model as soon as it hears "Hey
+  Jarvis", and keeps it loaded for `JARVIS_OLLAMA_KEEP_ALIVE` after you last spoke
+  (default `30m`; `-1` keeps it loaded always). Loaded, answers start in about 2 s; after
+  it unloads, the first answer takes about 8 s. It uses about 10 GB of memory while loaded.
 - **Local brain making things up from web results:** set `JARVIS_OLLAMA_THINK=true`.
   It reasons before answering from search results: far more reliable, but those answers
   take 15-45 s instead of about 8.

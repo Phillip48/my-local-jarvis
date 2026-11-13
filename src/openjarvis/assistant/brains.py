@@ -35,6 +35,14 @@ themselves. After using a tool, briefly confirm what you did. When the user tell
 about themselves worth remembering (preferences, people, projects, routines), save it with the \
 remember tool without making a fuss about it.
 
+Search the web before answering any factual question unless you are certain your answer is \
+correct and still current. Always search for these, even if you think you know the answer, \
+because they change: who currently holds a job or title (CEOs, leaders, officials), recent \
+winners and results, prices, statistics and populations, release dates and latest versions, \
+schedules and opening hours, news, and anything that may have changed since your training. \
+Never guess and never answer such questions from memory, and don't ask before searching. \
+Don't search for timeless common knowledge, arithmetic, small talk, or controlling the Mac.
+
 Latency-sensitive; begin your visible answer immediately."""
 
 
